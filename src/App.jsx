@@ -3,30 +3,56 @@ import React, { useState, useMemo } from "react";
 export default function ManojYasoPortfolio() {
   // State to manage showing the overlay gallery
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+  // State to manage which folder category is currently being viewed
+  const [selectedCategory, setSelectedCategory] = useState(null);
   // State for zooming into a single image
   const [selectedImage, setSelectedImage] = useState(null);
 
   // ----------------------------------------------------
-  // ⚡ AUTOMATIC FOLDER SCANNER (For the "View Portfolio" popup grid)
-  // This reads every file inside public/portfolio dynamically.
+  // ⚡ DEEP FOLDER SCANNER (Reads Subfolders Dynamically)
   // ----------------------------------------------------
-  const portfolioImages = useMemo(() => {
+  const portfolioData = useMemo(() => {
+    // The /**/ added here tells Vite to look inside subfolders too!
     const imageModules = import.meta.glob(
-      "/public/portfolio/*.{png,jpg,jpeg,PNG,JPG,JPEG}",
+      "/public/portfolio/**/*.{png,jpg,jpeg,PNG,JPG,JPEG}",
       { eager: true }
     );
 
-    return Object.keys(imageModules).map((filePath) => {
-      const cleanPath = filePath.replace("/public", "");
-      const fileNameWithExt = filePath.split("/").pop();
-      const cleanTitle = fileNameWithExt.replace(/\.[^/.]+$/, "");
-      const encodedPath = cleanPath.replace(/ /g, "%20");
+    const categories = {};
 
-      return {
+    Object.keys(imageModules).forEach((filePath) => {
+      // Remove /public for web URL paths
+      const cleanPath = filePath.replace("/public", "");
+      const pathParts = cleanPath.split("/");
+
+      let folderName = "Main Gallery"; 
+      let fileNameWithExt = "";
+
+      // Check if the file is inside a subfolder
+      if (pathParts.length > 3) {
+        // Grab the folder name and replace underscores/dashes with spaces for clean UI
+        folderName = pathParts[2].replace(/[_-]/g, " ");
+        fileNameWithExt = pathParts[pathParts.length - 1];
+      } else {
+        // It sits directly in the root /portfolio/ folder
+        fileNameWithExt = pathParts[2];
+      }
+
+      const cleanTitle = fileNameWithExt.replace(/\.[^/.]+$/, "");
+      const encodedPath = encodeURI(cleanPath);
+
+      // Create the category array if it doesn't exist yet
+      if (!categories[folderName]) {
+        categories[folderName] = [];
+      }
+
+      categories[folderName].push({
         src: encodedPath,
         title: cleanTitle,
-      };
+      });
     });
+
+    return categories;
   }, []);
 
   // ----------------------------------------------------
@@ -67,6 +93,13 @@ export default function ManojYasoPortfolio() {
     else if (currentSrc.endsWith(".png")) {
       e.target.src = `/title%20images/${baseName}.jpeg`;
     }
+  };
+
+  // Helper to cleanly close gallery and reset views
+  const closeGallery = () => {
+    setIsGalleryOpen(false);
+    setSelectedCategory(null);
+    setSelectedImage(null);
   };
 
   return (
@@ -362,7 +395,7 @@ export default function ManojYasoPortfolio() {
 
       {/* FOOTER */}
       <footer className="border-t border-gray-800 py-10 text-center text-gray-500 text-sm tracking-wide">
-        © 2026 Manoj Yaso [ MONAIM ] — AR/VR • Environment Design • Architectural Visualization
+        © 2026 Manoj Yasodharan [ MONAIM ] — AR/VR • Environment Design • Architectural Visualization
       </footer>
 
 
@@ -370,29 +403,72 @@ export default function ManojYasoPortfolio() {
       {isGalleryOpen && (
         <div className="fixed inset-0 z-50 bg-[#05070c]/98 backdrop-blur-xl flex flex-col p-6 overflow-y-auto">
           
+          {/* HEADER NAV */}
           <div className="max-w-7xl w-full mx-auto flex justify-between items-center mb-10 border-b border-gray-800 pb-5 pt-4">
             <div>
-              <h2 className="text-3xl font-bold text-yellow-400 tracking-tight">MONAIM STUDIO PORTFOLIO</h2>
-              <p className="text-gray-400 text-sm mt-1">
-                Displaying {portfolioImages.length} Renders Instantly Scan-Loaded From Public Folder
-              </p>
+              <h2 className="text-3xl font-bold text-yellow-400 tracking-tight">
+                {selectedCategory ? `CATEGORY: ${selectedCategory.toUpperCase()}` : "PORTFOLIO GALLERIES"}
+              </h2>
+              {selectedCategory && (
+                <button 
+                  onClick={() => setSelectedCategory(null)}
+                  className="mt-3 text-gray-400 hover:text-yellow-400 transition duration-200 text-sm font-medium flex items-center gap-2"
+                >
+                  ← Back to Categories
+                </button>
+              )}
             </div>
             
             <button
-              onClick={() => setIsGalleryOpen(false)}
+              onClick={closeGallery}
               className="px-6 py-3 bg-gray-800 hover:bg-yellow-400 hover:text-black text-white rounded-xl font-semibold transition duration-200 cursor-pointer text-sm uppercase tracking-wider"
             >
               ✕ Close Gallery
             </button>
           </div>
 
-          {portfolioImages.length === 0 ? (
+          {Object.keys(portfolioData).length === 0 ? (
             <div className="text-center py-20 text-gray-500 text-lg">
               No images found inside your <code className="text-yellow-400">public/portfolio/</code> folder yet.
             </div>
           ) : (
             <div className="max-w-7xl w-full mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
-              {portfolioImages.map((image, idx) => (
+              
+              {/* VIEW 1: SHOW CATEGORY FOLDERS */}
+              {!selectedCategory && Object.keys(portfolioData).map((folderName, idx) => {
+                const imagesInFolder = portfolioData[folderName];
+                const thumbImage = imagesInFolder[0]?.src; // Use first image as thumbnail
+                return (
+                  <div 
+                    key={idx} 
+                    className="group relative bg-[#0d1420] border border-gray-800 rounded-2xl overflow-hidden shadow-2xl hover:border-yellow-400 transition duration-300 cursor-pointer"
+                    onClick={() => setSelectedCategory(folderName)}
+                  >
+                    <div className="aspect-video w-full overflow-hidden bg-black relative">
+                      <img 
+                        src={thumbImage} 
+                        alt={folderName} 
+                        className="w-full h-full object-cover opacity-50 group-hover:opacity-80 group-hover:scale-105 transition duration-500"
+                        loading="lazy"
+                      />
+                      {/* Folder Icon Overlay */}
+                      <div className="absolute inset-0 flex items-center justify-center">
+                         <div className="bg-black/60 backdrop-blur-md px-6 py-3 rounded-xl border border-gray-600 group-hover:border-yellow-400 transition duration-300 flex items-center gap-3">
+                            <span className="text-2xl">📁</span>
+                            <span className="text-white font-bold tracking-wide uppercase">{folderName}</span>
+                         </div>
+                      </div>
+                    </div>
+                    <div className="p-4 bg-gradient-to-t from-[#05070c] via-[#0d1420]/90 to-transparent flex justify-between items-center">
+                       <p className="text-gray-300 text-sm font-medium group-hover:text-yellow-400">Open Folder</p>
+                       <p className="text-gray-500 text-xs uppercase tracking-widest bg-gray-800 px-3 py-1 rounded-full">{imagesInFolder.length} Items</p>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* VIEW 2: SHOW IMAGES INSIDE SELECTED CATEGORY */}
+              {selectedCategory && portfolioData[selectedCategory].map((image, idx) => (
                 <div 
                   key={idx} 
                   className="group relative bg-[#0d1420] border border-gray-800 rounded-2xl overflow-hidden shadow-2xl hover:border-yellow-400 transition duration-300 cursor-zoom-in"
@@ -414,6 +490,7 @@ export default function ManojYasoPortfolio() {
                   </div>
                 </div>
               ))}
+              
             </div>
           )}
         </div>
